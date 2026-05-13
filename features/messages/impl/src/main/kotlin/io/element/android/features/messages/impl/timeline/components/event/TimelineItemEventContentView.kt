@@ -46,6 +46,9 @@ fun TimelineItemEventContentView(
     onLinkLongClick: (Link) -> Unit,
     eventSink: (TimelineEvent.TimelineItemEvent) -> Unit,
     modifier: Modifier = Modifier,
+    showSirenbert: Boolean = false,
+    sirenbertRole: String = "S",
+    sirenbertMessageId: String = "",
     onContentLayoutChange: (ContentAvoidingLayoutData) -> Unit = {},
 ) {
     val presenterFactories = LocalTimelineItemPresenterFactories.current
@@ -65,6 +68,9 @@ fun TimelineItemEventContentView(
             modifier = modifier,
             onLinkClick = onLinkClick,
             onLinkLongClick = onLinkLongClick,
+            showSirenbert = showSirenbert,
+            sirenbertRole = sirenbertRole,
+            sirenbertMessageId = sirenbertMessageId,
             onContentLayoutChange = onContentLayoutChange
         )
         is TimelineItemUnknownContent -> TimelineItemUnknownView(

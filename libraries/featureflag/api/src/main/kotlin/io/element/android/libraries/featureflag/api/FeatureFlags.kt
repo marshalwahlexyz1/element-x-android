@@ -151,4 +151,14 @@ enum class FeatureFlags(
         defaultValue = { false },
         isFinished = false,
     ),
+    Sirenbert(
+        key = "feature.sirenbert",
+        title = "SIRENBERT scam detection",
+        description = "Show SIRENBERT pig-butchering scam risk under each text message. " +
+            "Runs the on-device classifier on incoming and outgoing text content. " +
+            "Raw message text never leaves the device.",
+        defaultValue = { false },
+        isFinished = false,
+        isInLabs = true,
+    ),
 }

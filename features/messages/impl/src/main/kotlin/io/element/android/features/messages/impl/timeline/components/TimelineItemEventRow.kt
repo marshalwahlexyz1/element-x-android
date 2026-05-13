@@ -144,6 +144,7 @@ fun TimelineItemEventRow(
     renderReadReceipts: Boolean,
     isLastOutgoingMessage: Boolean,
     displayThreadSummaries: Boolean,
+    displaySirenbert: Boolean,
     onEventClick: () -> Unit,
     onLongClick: () -> Unit,
     onLinkClick: (Link) -> Unit,
@@ -171,6 +172,9 @@ fun TimelineItemEventRow(
             onLinkLongClick = onLinkLongClick,
             eventSink = eventSink,
             modifier = contentModifier,
+            showSirenbert = displaySirenbert,
+            sirenbertRole = if (event.isMine) "T" else "S",
+            sirenbertMessageId = event.id.toString(),
             onContentLayoutChange = onContentLayoutChange
         )
     },

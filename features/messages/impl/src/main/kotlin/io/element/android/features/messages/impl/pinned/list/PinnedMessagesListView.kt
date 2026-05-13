@@ -229,6 +229,7 @@ private fun PinnedMessagesListLoaded(
                 onContentClick = onEventClick,
                 onLongClick = ::onMessageLongClick,
                 displayThreadSummaries = displayThreadSummaries,
+                displaySirenbert = false,
                 inReplyToClick = {},
                 onReactionClick = { _, _ -> },
                 onReactionLongClick = { _, _ -> },

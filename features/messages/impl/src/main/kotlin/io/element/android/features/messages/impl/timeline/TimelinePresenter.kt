@@ -152,6 +152,9 @@ class TimelinePresenter(
         val displayFloatingDateBadge by produceState(false) {
             value = featureFlagService.isFeatureEnabled(FeatureFlags.FloatingDateBadge)
         }
+        val displaySirenbert by produceState(false) {
+            value = featureFlagService.isFeatureEnabled(FeatureFlags.Sirenbert)
+        }
 
         fun handleEvent(event: TimelineEvent) {
             when (event) {
@@ -320,6 +323,7 @@ class TimelinePresenter(
             resolveVerifiedUserSendFailureState = resolveVerifiedUserSendFailureState,
             displayThreadSummaries = displayThreadSummaries,
             displayFloatingDateBadge = displayFloatingDateBadge,
+            displaySirenbert = displaySirenbert,
             eventSink = ::handleEvent,
         )
     }

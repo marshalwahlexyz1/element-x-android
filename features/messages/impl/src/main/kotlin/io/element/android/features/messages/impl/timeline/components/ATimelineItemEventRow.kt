@@ -26,6 +26,7 @@ internal fun ATimelineItemEventRow(
     isLastOutgoingMessage: Boolean = false,
     timelineProtectionState: TimelineProtectionState = aTimelineProtectionState(),
     displayThreadSummaries: Boolean = false,
+    displaySirenbert: Boolean = false,
 ) = TimelineItemEventRow(
     event = event,
     timelineMode = timelineMode,
@@ -34,6 +35,7 @@ internal fun ATimelineItemEventRow(
     timelineProtectionState = timelineProtectionState,
     isLastOutgoingMessage = isLastOutgoingMessage,
     displayThreadSummaries = displayThreadSummaries,
+    displaySirenbert = displaySirenbert,
     onEventClick = {},
     onLongClick = {},
     onLinkClick = {},

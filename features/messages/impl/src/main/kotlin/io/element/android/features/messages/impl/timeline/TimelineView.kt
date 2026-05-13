@@ -175,6 +175,7 @@ fun TimelineView(
                         isLastOutgoingMessage = state.isLastOutgoingMessage(timelineItem.identifier()),
                         focusedEventId = state.focusedEventId,
                         displayThreadSummaries = state.displayThreadSummaries,
+                        displaySirenbert = state.displaySirenbert,
                         onUserDataClick = onUserDataClick,
                         onLinkClick = onLinkClick,
                         onLinkLongClick = ::onLinkLongClick,
