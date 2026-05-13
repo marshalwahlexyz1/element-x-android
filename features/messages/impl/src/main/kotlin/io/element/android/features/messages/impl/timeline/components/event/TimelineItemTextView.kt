@@ -39,6 +39,7 @@ import io.element.android.libraries.textcomposer.ElementRichTextEditorStyle
 import io.element.android.libraries.textcomposer.mentions.LocalMentionSpanUpdater
 import io.element.android.wysiwyg.compose.EditorStyledText
 import io.element.android.wysiwyg.link.Link
+import timber.log.Timber
 
 @Composable
 fun TimelineItemTextView(
@@ -102,6 +103,7 @@ private fun SirenbertPlaceholderBadge(
     // role-aware rendering end-to-end before the cache and API call are wired in.
     // Replace with the real SirenbertResult lookup in Phase A.2 (SirenbertCache).
     val shortId = messageId.take(8)
+    Timber.tag("SIRENBERT").d("badge render role=%s id=%s", role, shortId)
     Text(
         text = "SIRENBERT[$role] $shortId · pending",
         style = ElementTheme.typography.fontBodySmRegular,

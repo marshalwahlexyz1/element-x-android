@@ -152,8 +152,13 @@ class TimelinePresenter(
         val displayFloatingDateBadge by produceState(false) {
             value = featureFlagService.isFeatureEnabled(FeatureFlags.FloatingDateBadge)
         }
-        val displaySirenbert by produceState(false) {
-            value = featureFlagService.isFeatureEnabled(FeatureFlags.Sirenbert)
+        // Use the *flow* variant so toggling the SIRENBERT flag at runtime takes effect
+        // without restarting the app. (The two flags above use the snapshot read pattern,
+        // but for SIRENBERT live toggling matters during development.)
+        val displaySirenbert by featureFlagService.isFeatureEnabledFlow(FeatureFlags.Sirenbert)
+            .collectAsState(initial = false)
+        LaunchedEffect(displaySirenbert) {
+            Timber.tag("SIRENBERT").d("displaySirenbert=%s", displaySirenbert)
         }
 
         fun handleEvent(event: TimelineEvent) {
