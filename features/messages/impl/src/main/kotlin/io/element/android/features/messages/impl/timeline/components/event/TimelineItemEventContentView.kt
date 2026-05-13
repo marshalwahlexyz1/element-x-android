@@ -34,6 +34,7 @@ import io.element.android.features.messages.impl.timeline.model.event.ensureActi
 import io.element.android.libraries.architecture.Presenter
 import io.element.android.libraries.voiceplayer.api.VoiceMessageState
 import io.element.android.wysiwyg.link.Link
+import timber.log.Timber
 
 @Composable
 fun TimelineItemEventContentView(
@@ -52,6 +53,17 @@ fun TimelineItemEventContentView(
     onContentLayoutChange: (ContentAvoidingLayoutData) -> Unit = {},
 ) {
     val presenterFactories = LocalTimelineItemPresenterFactories.current
+    if (showSirenbert) {
+        // Phase A.1 diagnostic: log every content type that reaches this view
+        // while the SIRENBERT flag is on, so we can see WHY the badge does or
+        // doesn't render. Remove once routing is settled in Phase A.4.
+        Timber.tag("SIRENBERT").d(
+            "content view role=%s id=%s content=%s",
+            sirenbertRole,
+            sirenbertMessageId.take(12),
+            content.javaClass.simpleName,
+        )
+    }
     when (content) {
         is TimelineItemEncryptedContent -> TimelineItemEncryptedView(
             content = content,
