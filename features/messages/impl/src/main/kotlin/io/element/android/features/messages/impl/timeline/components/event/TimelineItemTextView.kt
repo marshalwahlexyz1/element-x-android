@@ -18,13 +18,18 @@ import androidx.compose.material3.LocalContentColor
 import androidx.compose.material3.LocalTextStyle
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.tooling.preview.PreviewParameter
 import androidx.compose.ui.unit.dp
+import androidx.compose.runtime.collectAsState
 import io.element.android.compound.theme.ElementTheme
+import io.element.android.features.messages.impl.sirenbert.SirenbertCache
+import io.element.android.features.messages.impl.sirenbert.SirenbertResult
 import io.element.android.features.messages.impl.timeline.components.layout.ContentAvoidingLayout
 import io.element.android.features.messages.impl.timeline.components.layout.ContentAvoidingLayoutData
 import io.element.android.features.messages.impl.timeline.model.event.TimelineItemTextBasedContent
@@ -99,16 +104,44 @@ private fun SirenbertPlaceholderBadge(
     role: String,
     messageId: String,
 ) {
-    // Phase A.1 placeholder: badge shows role + short event id so we can verify
-    // role-aware rendering end-to-end before the cache and API call are wired in.
-    // Replace with the real SirenbertResult lookup in Phase A.2 (SirenbertCache).
-    val shortId = messageId.take(8)
-    Timber.tag("SIRENBERT").d("badge render role=%s id=%s", role, shortId)
+    // Phase A.2: badge reads the per-event result from SirenbertCache. The
+    // singleton cache is updated by the API client (Phase A.2 commit 2);
+    // until then every message renders as "...".
+    //
+    // Empty messageId means the event has no durable Matrix event id yet
+    // (likely a local-echo of a message we just sent). Skip caching for
+    // those; render a placeholder using the role only.
+    val cacheKey = messageId
+    val resultFlow = remember(cacheKey) { SirenbertCache.observe(cacheKey) }
+    val result by resultFlow.collectAsState(initial = SirenbertCache.peek(cacheKey))
+    val shortId = if (messageId.isEmpty()) "(local)" else messageId.take(10)
+    val tail = when (result?.status) {
+        null, SirenbertResult.Status.Idle -> "…"
+        SirenbertResult.Status.InFlight -> "… (req)"
+        SirenbertResult.Status.ContextOnly -> "CONTEXT_ONLY"
+        SirenbertResult.Status.Classified -> formatClassified(result!!)
+        SirenbertResult.Status.Error -> "! ${result?.errorMessage.orEmpty()}"
+    }
+    Timber.tag("SIRENBERT").d(
+        "badge render role=%s id=%s tail=%s",
+        role,
+        shortId,
+        tail,
+    )
     Text(
-        text = "SIRENBERT[$role] $shortId · pending",
+        text = "SIRENBERT[$role] $shortId · $tail",
         style = ElementTheme.typography.fontBodySmRegular,
         color = ElementTheme.colors.textSecondary,
     )
+}
+
+private fun formatClassified(r: SirenbertResult): String {
+    val pieces = mutableListOf<String>()
+    r.trigger?.let { pieces += it }
+    r.state?.let { pieces += it }
+    r.suspProb?.let { pieces += "susp=%.2f".format(it) }
+    r.scamProb?.let { pieces += "scam=%.2f".format(it) }
+    return pieces.joinToString(" · ").ifEmpty { "classified" }
 }
 
 @VisibleForTesting(otherwise = VisibleForTesting.PRIVATE)

@@ -74,7 +74,7 @@ fun TimelineItemGroupedEventsRow(
                 onLongClick = null,
                 showSirenbert = displaySirenbert,
                 sirenbertRole = if (event.isMine) "T" else "S",
-                sirenbertMessageId = event.id.toString(),
+                sirenbertMessageId = event.eventId?.value.orEmpty(),
                 onContentLayoutChange = onContentLayoutChange
             )
         },
@@ -152,7 +152,7 @@ private fun TimelineItemGroupedEventsRowContent(
                 onLongClick = null,
                 showSirenbert = displaySirenbert,
                 sirenbertRole = if (event.isMine) "T" else "S",
-                sirenbertMessageId = event.id.toString(),
+                sirenbertMessageId = event.eventId?.value.orEmpty(),
                 onContentLayoutChange = onContentLayoutChange
             )
         },

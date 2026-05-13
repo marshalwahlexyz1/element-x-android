@@ -89,7 +89,7 @@ internal fun TimelineItemRow(
                 modifier = contentModifier,
                 showSirenbert = displaySirenbert,
                 sirenbertRole = if (event.isMine) "T" else "S",
-                sirenbertMessageId = event.id.toString(),
+                sirenbertMessageId = event.eventId?.value.orEmpty(),
                 onContentLayoutChange = onContentLayoutChange
             )
         },
