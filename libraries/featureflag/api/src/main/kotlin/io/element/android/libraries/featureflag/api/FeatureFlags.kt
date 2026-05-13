@@ -158,7 +158,7 @@ enum class FeatureFlags(
             "Runs the on-device classifier on incoming and outgoing text content. " +
             "Raw message text never leaves the device.",
         defaultValue = { false },
+        // Surface in Developer options (not Labs) while still under active development.
         isFinished = false,
-        isInLabs = true,
     ),
 }
