@@ -18,6 +18,11 @@
         <domain includeSubdomains="true">127.0.0.1</domain>
         <!-- Localhost for Android emulator -->
         <domain includeSubdomains="true">10.0.2.2</domain>
+        <!-- SIRENBERT FastAPI dev server (laptop LAN IPs). Android Network
+             Security Config does NOT support CIDR, so each laptop IP must be
+             listed explicitly. Add your laptop's current LAN IPv4 here. -->
+        <domain includeSubdomains="true">10.0.0.248</domain>     <!-- home -->
+        <domain includeSubdomains="true">10.239.146.103</domain> <!-- work -->
         <!-- Onion services -->
         <domain includeSubdomains="true">onion</domain>
 

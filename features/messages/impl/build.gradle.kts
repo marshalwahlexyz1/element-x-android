@@ -21,6 +21,16 @@ android {
             isIncludeAndroidResources = true
         }
     }
+    buildFeatures {
+        buildConfig = true
+    }
+    defaultConfig {
+        // SIRENBERT FastAPI server URL. Change this when the laptop running the
+        // FastAPI server moves between networks (home/work/other). The phone must
+        // be on the same Wi-Fi network as the laptop and the network security
+        // config (network_security_config.xml) must permit cleartext to this host.
+        buildConfigField("String", "SIRENBERT_API_URL", "\"http://10.0.0.248:8000\"")
+    }
 }
 
 setupDependencyInjection()
@@ -62,6 +72,10 @@ dependencies {
     implementation(projects.libraries.uiUtils)
     implementation(projects.libraries.testtags)
     implementation(projects.features.networkmonitor.api)
+    // SIRENBERT FastAPI client (Phase A.2): direct OkHttp POST to /predict.
+    implementation(platform(libs.network.okhttp.bom))
+    implementation(libs.network.okhttp)
+    implementation(libs.serialization.json)
     implementation(projects.services.analytics.compose)
     implementation(projects.services.appnavstate.api)
     implementation(projects.services.toolbox.api)

@@ -26,8 +26,10 @@ import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.tooling.preview.PreviewParameter
 import androidx.compose.ui.unit.dp
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import io.element.android.compound.theme.ElementTheme
+import io.element.android.features.messages.impl.sirenbert.LocalSirenbertRoomId
 import io.element.android.features.messages.impl.sirenbert.SirenbertCache
 import io.element.android.features.messages.impl.sirenbert.SirenbertResult
 import io.element.android.features.messages.impl.timeline.components.layout.ContentAvoidingLayout
@@ -83,6 +85,7 @@ fun TimelineItemTextView(
                     SirenbertPlaceholderBadge(
                         role = sirenbertRole,
                         messageId = sirenbertMessageId,
+                        body = content.body,
                     )
                 }
             } else {
@@ -103,17 +106,29 @@ fun TimelineItemTextView(
 private fun SirenbertPlaceholderBadge(
     role: String,
     messageId: String,
+    body: String,
 ) {
-    // Phase A.2: badge reads the per-event result from SirenbertCache. The
-    // singleton cache is updated by the API client (Phase A.2 commit 2);
-    // until then every message renders as "...".
+    // Phase A.2: badge reads the per-event result from SirenbertCache and
+    // triggers a /predict POST via SirenbertCache.ensureClassified on first
+    // composition with a non-empty event id.
     //
     // Empty messageId means the event has no durable Matrix event id yet
-    // (likely a local-echo of a message we just sent). Skip caching for
-    // those; render a placeholder using the role only.
+    // (local-echo). We render '(local)' and skip the API call; the next
+    // recomposition (when the eventId resolves) will fire the request.
+    val roomId = LocalSirenbertRoomId.current
     val cacheKey = messageId
     val resultFlow = remember(cacheKey) { SirenbertCache.observe(cacheKey) }
     val result by resultFlow.collectAsState(initial = SirenbertCache.peek(cacheKey))
+    LaunchedEffect(roomId, cacheKey, role) {
+        if (cacheKey.isNotEmpty() && roomId.isNotEmpty()) {
+            SirenbertCache.ensureClassified(
+                roomId = roomId,
+                eventId = cacheKey,
+                role = role,
+                body = body,
+            )
+        }
+    }
     val shortId = if (messageId.isEmpty()) "(local)" else messageId.take(10)
     val tail = when (result?.status) {
         null, SirenbertResult.Status.Idle -> "…"

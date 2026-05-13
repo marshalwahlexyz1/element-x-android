@@ -203,6 +203,9 @@ fun MessagesView(
     }
 
     val expandableState = rememberExpandableBottomSheetLayoutState()
+    androidx.compose.runtime.CompositionLocalProvider(
+        io.element.android.features.messages.impl.sirenbert.LocalSirenbertRoomId provides state.roomId.value,
+    ) {
     ExpandableBottomSheetLayout(
         modifier = modifier
             .fillMaxSize()
@@ -408,6 +411,7 @@ fun MessagesView(
         },
         state = state.linkState,
     )
+    } // close CompositionLocalProvider(LocalSirenbertRoomId)
 }
 
 @Composable
