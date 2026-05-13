@@ -87,6 +87,9 @@ internal fun TimelineItemRow(
                 onLinkLongClick = onLinkLongClick,
                 eventSink = eventSink,
                 modifier = contentModifier,
+                showSirenbert = displaySirenbert,
+                sirenbertRole = if (event.isMine) "T" else "S",
+                sirenbertMessageId = event.id.toString(),
                 onContentLayoutChange = onContentLayoutChange
             )
         },
