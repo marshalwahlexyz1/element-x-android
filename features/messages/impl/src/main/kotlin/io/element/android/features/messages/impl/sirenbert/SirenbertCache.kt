@@ -87,6 +87,7 @@ object SirenbertCache {
                     } else {
                         SirenbertResult.Status.Classified
                     },
+                    verdict = resp.verdict?.takeIf { it.isNotBlank() && !isContextOnly },
                     trigger = resp.messageTrigger,
                     state = resp.fsmState,
                     suspProb = resp.suspiciousProbability,

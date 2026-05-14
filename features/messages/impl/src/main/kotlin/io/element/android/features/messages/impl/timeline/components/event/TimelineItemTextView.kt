@@ -152,6 +152,7 @@ private fun SirenbertPlaceholderBadge(
 
 private fun formatClassified(r: SirenbertResult): String {
     val pieces = mutableListOf<String>()
+    r.verdict?.takeIf { it.isNotBlank() }?.let { pieces += it }
     r.trigger?.let { pieces += it }
     r.state?.let { pieces += it }
     r.suspProb?.let { pieces += "susp=%.2f".format(it) }

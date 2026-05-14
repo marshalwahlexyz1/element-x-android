@@ -17,6 +17,8 @@ data class SirenbertResult(
     val role: String,
     /** Phase A.2 lifecycle of the classification request. */
     val status: Status,
+    /** Conversation-level verdict from the API: NON_SCAM / SUSPICIOUS / SCAM. */
+    val verdict: String? = null,
     /** Stage 1 trigger label, when status == [Status.Classified]. */
     val trigger: String? = null,
     /** FSM state after this message: NULL/IC/RB/PE/EX. */
