@@ -78,8 +78,11 @@ object SirenbertCache {
         scope.launch {
             try {
                 val resp = SirenbertApiClient.predict(roomId, eventId, role, body)
-                val verdict = resp.verdict?.uppercase().orEmpty()
-                val isContextOnly = verdict == "CONTEXT_ONLY"
+                // Authoritative CONTEXT_ONLY signal is the server's
+                // stored_as_context_only field. Fall back to the label string
+                // for safety in case an older server doesn't emit the boolean.
+                val isContextOnly = resp.storedAsContextOnly == true ||
+                    resp.label?.uppercase() == "CONTEXT_ONLY"
                 val result = SirenbertResult(
                     role = role,
                     status = if (isContextOnly) {
@@ -87,11 +90,18 @@ object SirenbertCache {
                     } else {
                         SirenbertResult.Status.Classified
                     },
-                    verdict = resp.verdict?.takeIf { it.isNotBlank() && !isContextOnly },
+                    // Use the conversation-level label as the running verdict
+                    // shown in the badge. It updates as the conversation grows.
+                    verdict = resp.conversationLabel?.takeIf {
+                        it.isNotBlank() && !isContextOnly
+                    },
                     trigger = resp.messageTrigger,
-                    state = resp.fsmState,
-                    suspProb = resp.suspiciousProbability,
-                    scamProb = resp.scamProbability,
+                    // FSM state is not (yet) returned by the FastAPI server.
+                    state = null,
+                    // Conversation-level probs (the badge shows running risk,
+                    // not the isolated per-message prob).
+                    suspProb = resp.convSuspiciousProbability,
+                    scamProb = resp.convScamProbability,
                 )
                 put(eventId, result)
                 Timber.tag("SIRENBERT").d(

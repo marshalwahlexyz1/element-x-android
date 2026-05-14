@@ -66,13 +66,22 @@ internal object SirenbertApiClient {
         val message: String,
     )
 
+    /**
+     * Mirrors the actual FastAPI /predict response. Fields that the server
+     * doesn't return are left null. See the laptop response shape captured
+     * 2026-05-13 (redefined_approach/docs/12_ELEMENT_X_FASTAPI_DEMO.md).
+     */
     @Serializable
     internal data class PredictResponse(
-        val verdict: String? = null,
+        @SerialName("label") val label: String? = null,
+        @SerialName("conversation_label") val conversationLabel: String? = null,
         @SerialName("message_trigger") val messageTrigger: String? = null,
-        @SerialName("fsm_state") val fsmState: String? = null,
+        @SerialName("top_trigger") val topTrigger: String? = null,
         @SerialName("suspicious_probability") val suspiciousProbability: Float? = null,
-        @SerialName("conversation_scam_probability") val scamProbability: Float? = null,
+        @SerialName("scam_probability") val scamProbability: Float? = null,
+        @SerialName("conversation_suspicious_probability") val convSuspiciousProbability: Float? = null,
+        @SerialName("conversation_scam_probability") val convScamProbability: Float? = null,
+        @SerialName("stored_as_context_only") val storedAsContextOnly: Boolean? = null,
         val error: String? = null,
     )
 
