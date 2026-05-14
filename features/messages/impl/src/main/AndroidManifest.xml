@@ -17,6 +17,7 @@
             android:exported="true">
             <intent-filter>
                 <action android:name="io.element.android.x.debug.SIRENBERT_RESET" />
+                <action android:name="io.element.android.x.debug.SIRENBERT_EXPORT" />
             </intent-filter>
         </receiver>
     </application>
