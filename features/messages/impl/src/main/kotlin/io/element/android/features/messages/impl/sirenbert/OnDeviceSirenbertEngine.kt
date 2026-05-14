@@ -245,13 +245,16 @@ class OnDeviceSirenbertEngine private constructor(
             val env = OrtEnvironment.getEnvironment()
 
             // ONNX Runtime can load external .data files only when the .onnx
-            // is given as a file path, not as a byte buffer. So we copy the
-            // assets to the app's cache dir on first init.
-            val stage1File = copyAssetToCache(context, "$ASSET_DIR/$STAGE1_ASSET")
+            // is given as a file path, not as a byte buffer. We materialise
+            // the bundle into a dedicated subdir of cacheDir, preserving the
+            // exact filenames so the external_data "location=stage1.onnx.data"
+            // reference inside stage1.onnx still resolves.
+            val cacheRoot = File(context.cacheDir, ASSET_DIR).apply { mkdirs() }
+            val stage1File = copyAssetToCache(context, cacheRoot, STAGE1_ASSET)
             runCatching {
-                copyAssetToCache(context, "$ASSET_DIR/${STAGE1_ASSET}.data")
+                copyAssetToCache(context, cacheRoot, "${STAGE1_ASSET}.data")
             }
-            val stage2File = copyAssetToCache(context, "$ASSET_DIR/$STAGE2_ASSET")
+            val stage2File = copyAssetToCache(context, cacheRoot, STAGE2_ASSET)
 
             val opts = OrtSession.SessionOptions().apply {
                 setIntraOpNumThreads(2)
@@ -282,11 +285,10 @@ class OnDeviceSirenbertEngine private constructor(
             )
         }
 
-        private fun copyAssetToCache(context: Context, assetPath: String): File {
-            val name = assetPath.substringAfterLast('/')
-            val out = File(context.cacheDir, "sirenbert_$name")
+        private fun copyAssetToCache(context: Context, cacheRoot: File, assetName: String): File {
+            val out = File(cacheRoot, assetName)
             if (!out.exists() || out.length() == 0L) {
-                context.assets.open(assetPath).use { input ->
+                context.assets.open("$ASSET_DIR/$assetName").use { input ->
                     out.outputStream().use { output -> input.copyTo(output) }
                 }
             }
