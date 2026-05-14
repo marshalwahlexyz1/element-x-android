@@ -34,6 +34,9 @@ class SirenbertResetReceiver : BroadcastReceiver() {
     override fun onReceive(context: Context, intent: Intent) {
         if (intent.action != ACTION_RESET) return
         SirenbertCache.clear()
+        // If the on-device engine is initialised, wipe its per-room buffers
+        // too. If it's not (API-only mode), this is a no-op.
+        OnDeviceSirenbertEngine.getOrNull(context.applicationContext)?.reset()
         val newCounter = SirenbertSession.bump()
         val message = "SIRENBERT reset (session #$newCounter)"
         Timber.tag("SIRENBERT").i(message)

@@ -58,6 +58,7 @@ fun aTimelineState(
     displayThreadSummaries: Boolean = false,
     displayFloatingDateBadge: Boolean = false,
     displaySirenbert: Boolean = false,
+    displaySirenbertOnDevice: Boolean = false,
     eventSink: (TimelineEvent) -> Unit = {},
 ): TimelineState {
     val focusedEventId = timelineItems.filterIsInstance<TimelineItem.Event>().getOrNull(focusedEventIndex)?.eventId
@@ -79,6 +80,7 @@ fun aTimelineState(
         displayThreadSummaries = displayThreadSummaries,
         displayFloatingDateBadge = displayFloatingDateBadge,
         displaySirenbert = displaySirenbert,
+        displaySirenbertOnDevice = displaySirenbertOnDevice,
         eventSink = eventSink,
     )
 }

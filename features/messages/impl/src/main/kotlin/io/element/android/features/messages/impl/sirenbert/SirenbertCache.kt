@@ -6,6 +6,7 @@
 
 package io.element.android.features.messages.impl.sirenbert
 
+import android.content.Context
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
@@ -69,6 +70,8 @@ object SirenbertCache {
         eventId: String,
         role: String,
         body: String,
+        useOnDevice: Boolean = false,
+        appContext: Context? = null,
     ) {
         if (eventId.isEmpty()) return
         val existing = _results.value[eventId]
@@ -77,43 +80,68 @@ object SirenbertCache {
         put(eventId, SirenbertResult(role = role, status = SirenbertResult.Status.InFlight))
         scope.launch {
             try {
-                val resp = SirenbertApiClient.predict(roomId, eventId, role, body)
-                // Authoritative CONTEXT_ONLY signal is the server's
-                // stored_as_context_only field. Fall back to the label string
-                // for safety in case an older server doesn't emit the boolean.
-                val isContextOnly = resp.storedAsContextOnly == true ||
-                    resp.label?.uppercase() == "CONTEXT_ONLY"
-                val result = SirenbertResult(
-                    role = role,
-                    status = if (isContextOnly) {
-                        SirenbertResult.Status.ContextOnly
-                    } else {
-                        SirenbertResult.Status.Classified
-                    },
-                    // Use the conversation-level label as the running verdict
-                    // shown in the badge. It updates as the conversation grows.
-                    verdict = resp.conversationLabel?.takeIf {
-                        it.isNotBlank() && !isContextOnly
-                    },
-                    trigger = resp.messageTrigger,
-                    // FSM state is not (yet) returned by the FastAPI server.
-                    state = null,
-                    // Conversation-level probs (the badge shows running risk,
-                    // not the isolated per-message prob).
-                    suspProb = resp.convSuspiciousProbability,
-                    scamProb = resp.convScamProbability,
-                )
+                // Build the conversation_id we use for context. On-device the
+                // engine uses this string as its room key; on the API path we
+                // pass roomId through SirenbertApiClient which wraps it.
+                val conversationKey = SirenbertSession.conversationId(roomId)
+
+                val engine = if (useOnDevice && appContext != null) {
+                    OnDeviceSirenbertEngine.getOrNull(appContext.applicationContext)
+                } else {
+                    null
+                }
+
+                val result = if (engine != null) {
+                    val pred = engine.predict(conversationKey, role, body)
+                    val isContextOnly = pred.storedAsContextOnly == true ||
+                        pred.label?.uppercase() == "CONTEXT_ONLY"
+                    SirenbertResult(
+                        role = role,
+                        status = if (isContextOnly) {
+                            SirenbertResult.Status.ContextOnly
+                        } else {
+                            SirenbertResult.Status.Classified
+                        },
+                        verdict = pred.conversationLabel?.takeIf {
+                            it.isNotBlank() && !isContextOnly
+                        },
+                        trigger = pred.messageTrigger,
+                        state = null,
+                        suspProb = pred.convSuspiciousProbability,
+                        scamProb = pred.convScamProbability,
+                    )
+                } else {
+                    val resp = SirenbertApiClient.predict(roomId, eventId, role, body)
+                    val isContextOnly = resp.storedAsContextOnly == true ||
+                        resp.label?.uppercase() == "CONTEXT_ONLY"
+                    SirenbertResult(
+                        role = role,
+                        status = if (isContextOnly) {
+                            SirenbertResult.Status.ContextOnly
+                        } else {
+                            SirenbertResult.Status.Classified
+                        },
+                        verdict = resp.conversationLabel?.takeIf {
+                            it.isNotBlank() && !isContextOnly
+                        },
+                        trigger = resp.messageTrigger,
+                        state = null,
+                        suspProb = resp.convSuspiciousProbability,
+                        scamProb = resp.convScamProbability,
+                    )
+                }
                 put(eventId, result)
                 Timber.tag("SIRENBERT").d(
-                    "cache put id=%s status=%s trigger=%s state=%s susp=%s scam=%s",
+                    "cache put via=%s id=%s status=%s trigger=%s susp=%s scam=%s",
+                    if (engine != null) "OD" else "API",
                     eventId.take(12),
                     result.status,
                     result.trigger,
-                    result.state,
                     result.suspProb,
                     result.scamProb,
                 )
             } catch (t: Throwable) {
+                Timber.tag("SIRENBERT").w(t, "classify failed id=%s", eventId.take(12))
                 put(
                     eventId,
                     SirenbertResult(

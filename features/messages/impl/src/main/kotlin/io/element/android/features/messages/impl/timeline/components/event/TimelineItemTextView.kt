@@ -28,7 +28,9 @@ import androidx.compose.ui.tooling.preview.PreviewParameter
 import androidx.compose.ui.unit.dp
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
+import androidx.compose.ui.platform.LocalContext
 import io.element.android.compound.theme.ElementTheme
+import io.element.android.features.messages.impl.sirenbert.LocalSirenbertOnDevice
 import io.element.android.features.messages.impl.sirenbert.LocalSirenbertRoomId
 import io.element.android.features.messages.impl.sirenbert.SirenbertCache
 import io.element.android.features.messages.impl.sirenbert.SirenbertResult
@@ -116,16 +118,20 @@ private fun SirenbertPlaceholderBadge(
     // (local-echo). We render '(local)' and skip the API call; the next
     // recomposition (when the eventId resolves) will fire the request.
     val roomId = LocalSirenbertRoomId.current
+    val onDevice = LocalSirenbertOnDevice.current
+    val ctx = LocalContext.current
     val cacheKey = messageId
     val resultFlow = remember(cacheKey) { SirenbertCache.observe(cacheKey) }
     val result by resultFlow.collectAsState(initial = SirenbertCache.peek(cacheKey))
-    LaunchedEffect(roomId, cacheKey, role) {
+    LaunchedEffect(roomId, cacheKey, role, onDevice) {
         if (cacheKey.isNotEmpty() && roomId.isNotEmpty()) {
             SirenbertCache.ensureClassified(
                 roomId = roomId,
                 eventId = cacheKey,
                 role = role,
                 body = body,
+                useOnDevice = onDevice,
+                appContext = ctx,
             )
         }
     }

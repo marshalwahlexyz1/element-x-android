@@ -1,0 +1,11 @@
+# SIRENBERT on-device model artifacts.
+# Bundled at runtime via scp -> tar -xzf -> drop here. Never committed to git
+# (DistilBERT INT8 alone is 64MB and we don't want it bloating the repo).
+# To populate this directory, run prepare_ondevice_bundle.sh on SCC and scp
+# the result here (see redefined_approach/docs/12_ELEMENT_X_FASTAPI_DEMO.md).
+stage1.onnx
+stage1.onnx.data
+stage2.onnx
+vocab.txt
+tokenizer_config.json
+manifest.json

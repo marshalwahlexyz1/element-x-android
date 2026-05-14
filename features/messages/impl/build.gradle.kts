@@ -77,6 +77,8 @@ dependencies {
     implementation(platform(libs.network.okhttp.bom))
     implementation(libs.network.okhttp)
     implementation(libs.serialization.json)
+    // SIRENBERT on-device inference (Phase A.4 / Build 2): ONNX Runtime Android.
+    implementation(libs.sirenbert.onnxruntime)
     implementation(projects.services.analytics.compose)
     implementation(projects.services.appnavstate.api)
     implementation(projects.services.toolbox.api)

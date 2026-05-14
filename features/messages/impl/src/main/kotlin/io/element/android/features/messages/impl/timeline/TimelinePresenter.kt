@@ -157,8 +157,15 @@ class TimelinePresenter(
         // but for SIRENBERT live toggling matters during development.)
         val displaySirenbert by featureFlagService.isFeatureEnabledFlow(FeatureFlags.Sirenbert)
             .collectAsState(initial = false)
-        LaunchedEffect(displaySirenbert) {
-            Timber.tag("SIRENBERT").d("displaySirenbert=%s", displaySirenbert)
+        val displaySirenbertOnDevice by featureFlagService
+            .isFeatureEnabledFlow(FeatureFlags.SirenbertOnDevice)
+            .collectAsState(initial = false)
+        LaunchedEffect(displaySirenbert, displaySirenbertOnDevice) {
+            Timber.tag("SIRENBERT").d(
+                "displaySirenbert=%s onDevice=%s",
+                displaySirenbert,
+                displaySirenbertOnDevice,
+            )
         }
 
         fun handleEvent(event: TimelineEvent) {
@@ -329,6 +336,7 @@ class TimelinePresenter(
             displayThreadSummaries = displayThreadSummaries,
             displayFloatingDateBadge = displayFloatingDateBadge,
             displaySirenbert = displaySirenbert,
+            displaySirenbertOnDevice = displaySirenbertOnDevice,
             eventSink = ::handleEvent,
         )
     }

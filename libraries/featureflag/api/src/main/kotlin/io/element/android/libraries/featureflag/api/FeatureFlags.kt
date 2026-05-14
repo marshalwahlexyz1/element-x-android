@@ -161,4 +161,14 @@ enum class FeatureFlags(
         // Surface in Developer options (not Labs) while still under active development.
         isFinished = false,
     ),
+    SirenbertOnDevice(
+        key = "feature.sirenbert_on_device",
+        title = "SIRENBERT on-device inference",
+        description = "When ON, classify with the bundled ONNX model on this phone instead of " +
+            "POSTing to the laptop FastAPI server. Requires the model bundle to have been " +
+            "placed in features/messages/impl/src/main/assets/sirenbert/ at build time. " +
+            "Falls back to the API automatically if the bundle is missing.",
+        defaultValue = { false },
+        isFinished = false,
+    ),
 }
