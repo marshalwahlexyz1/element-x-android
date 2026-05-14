@@ -151,8 +151,11 @@ network_retrofit_bom = "com.squareup.retrofit2:retrofit-bom:3.0.0"
 network_retrofit = { module = "com.squareup.retrofit2:retrofit" }
 network_retrofit_converter_serialization = { module = "com.squareup.retrofit2:converter-kotlinx-serialization" }
 
-# SIRENBERT on-device inference (ONNX Runtime Mobile)
-sirenbert_onnxruntime = "com.microsoft.onnxruntime:onnxruntime-android:1.18.0"
+# SIRENBERT on-device inference (ONNX Runtime Mobile).
+# Pin to >=1.21 so the shipped .so files are 16 KB-page-size aligned
+# (Android 15+ requirement; 1.18 ships 4 KB-aligned .so and triggers
+# the "this app isn't 16 KB compatible" install warning).
+sirenbert_onnxruntime = "com.microsoft.onnxruntime:onnxruntime-android:1.26.0"
 
 # Quality
 # Reference ktlint-cli so that Renovate can check if a new version is available.
