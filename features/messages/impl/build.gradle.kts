@@ -32,6 +32,12 @@ android {
         // config (network_security_config.xml) must permit cleartext to this host.
         buildConfigField("String", "SIRENBERT_API_URL", "\"http://10.0.0.248:8000\"")
     }
+    androidResources {
+        // ONNX model files are loaded via memory-mapped I/O at runtime. Compressed
+        // entries can't be mmap'd, so they must ship uncompressed in the APK.
+        // The .data suffix carries the external_data weights for stage1.onnx.
+        noCompress += listOf("onnx", "data", "tflite")
+    }
 }
 
 setupDependencyInjection()
