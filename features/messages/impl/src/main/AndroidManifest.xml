@@ -7,4 +7,17 @@
   -->
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
     <uses-permission android:name="android.permission.RECORD_AUDIO" />
+
+    <application>
+        <!-- SIRENBERT dev reset hook. Trigger from PowerShell with:
+                 adb shell am broadcast -a io.element.android.x.debug.SIRENBERT_RESET
+             Exported so adb can reach it. No special permission required. -->
+        <receiver
+            android:name="io.element.android.features.messages.impl.sirenbert.SirenbertResetReceiver"
+            android:exported="true">
+            <intent-filter>
+                <action android:name="io.element.android.x.debug.SIRENBERT_RESET" />
+            </intent-filter>
+        </receiver>
+    </application>
 </manifest>

@@ -97,10 +97,11 @@ internal object SirenbertApiClient {
         body: String,
     ): PredictResponse {
         val url = "${BuildConfig.SIRENBERT_API_URL.trimEnd('/')}/predict"
+        val conversationId = SirenbertSession.conversationId(roomId)
         val requestBody = json.encodeToString(
             PredictRequest.serializer(),
             PredictRequest(
-                conversation_id = roomId,
+                conversation_id = conversationId,
                 message_id = eventId,
                 role = role,
                 message = body,
