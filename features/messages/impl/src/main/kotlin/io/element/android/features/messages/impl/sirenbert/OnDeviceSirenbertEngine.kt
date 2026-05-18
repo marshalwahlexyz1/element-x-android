@@ -255,6 +255,9 @@ class OnDeviceSirenbertEngine private constructor(
                 copyAssetToCache(context, cacheRoot, "${STAGE1_ASSET}.data")
             }
             val stage2File = copyAssetToCache(context, cacheRoot, STAGE2_ASSET)
+            runCatching {
+                copyAssetToCache(context, cacheRoot, "${STAGE2_ASSET}.data")
+            }
 
             val opts = OrtSession.SessionOptions().apply {
                 setIntraOpNumThreads(2)
