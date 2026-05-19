@@ -18,6 +18,7 @@
             <intent-filter>
                 <action android:name="io.element.android.x.debug.SIRENBERT_RESET" />
                 <action android:name="io.element.android.x.debug.SIRENBERT_EXPORT" />
+                <action android:name="io.element.android.x.debug.SIRENBERT_BULK_REPLAY" />
             </intent-filter>
         </receiver>
     </application>

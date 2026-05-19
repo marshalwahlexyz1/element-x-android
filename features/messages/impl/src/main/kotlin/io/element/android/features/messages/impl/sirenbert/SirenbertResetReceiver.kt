@@ -50,7 +50,17 @@ class SirenbertResetReceiver : BroadcastReceiver() {
         when (intent.action) {
             ACTION_RESET -> doReset(context)
             ACTION_EXPORT -> doExport(context)
+            ACTION_BULK_REPLAY -> doBulkReplay(context)
         }
+    }
+
+    private fun doBulkReplay(context: Context) {
+        SirenbertBulkReplay.launch(context)
+        Toast.makeText(
+            context,
+            "SIRENBERT bulk replay started; watch logcat for completion",
+            Toast.LENGTH_SHORT,
+        ).show()
     }
 
     private fun doReset(context: Context) {
@@ -112,5 +122,6 @@ class SirenbertResetReceiver : BroadcastReceiver() {
     companion object {
         const val ACTION_RESET = "io.element.android.x.debug.SIRENBERT_RESET"
         const val ACTION_EXPORT = "io.element.android.x.debug.SIRENBERT_EXPORT"
+        const val ACTION_BULK_REPLAY = "io.element.android.x.debug.SIRENBERT_BULK_REPLAY"
     }
 }
