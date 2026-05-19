@@ -92,9 +92,16 @@ class OnDeviceSirenbertEngine private constructor(
         }
 
         // Suspect message: build segment list (last k context msgs + this one).
+        // Each segment is prefixed with its role ("S: " or "T: ") to match the
+        // exact format Stage 1 was trained on (sirenbert_stage1_train.py
+        // build_examples: parts.append(f"{role}: {content}"), joined by [SEP]).
+        // Target messages also classify as suspect at the encoder level — the
+        // server uses "S: " for the message being classified regardless.
         val segments = buildList {
-            for (m in buf.context) add(m.second)
-            add(body)
+            for ((ctxRole, ctxBody) in buf.context) {
+                add("$ctxRole: $ctxBody")
+            }
+            add("S: $body")
         }
 
         val tokenized = tokenizer.encodeSegments(segments, maxLength)
