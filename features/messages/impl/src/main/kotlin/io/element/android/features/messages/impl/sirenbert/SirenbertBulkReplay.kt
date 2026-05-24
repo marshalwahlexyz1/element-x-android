@@ -8,10 +8,6 @@ package io.element.android.features.messages.impl.sirenbert
 
 import android.content.Context
 import android.os.SystemClock
-import kotlinx.coroutines.CoroutineScope
-import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.SupervisorJob
-import kotlinx.coroutines.launch
 import org.json.JSONArray
 import org.json.JSONObject
 import timber.log.Timber
@@ -47,27 +43,29 @@ import java.io.File
  * real Element X chats.
  */
 object SirenbertBulkReplay {
-    private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
     private const val INPUT_FILENAME = "eval_set.json"
     private const val TRIGGER_NUM_CLASSES = 14
 
     // Single-run guard: a second SIRENBERT_BULK_REPLAY broadcast while a run is
-    // already in flight would spawn a concurrent coroutine that competes for CPU
+    // already in flight would spawn a concurrent run that competes for CPU
     // (latency climbs, both runs get throttled). Ignore re-triggers until done.
     private val running = java.util.concurrent.atomic.AtomicBoolean(false)
 
-    fun launch(context: Context) {
+    /**
+     * Run the full bulk replay once, blocking the calling coroutine until done.
+     * Invoked from [SirenbertBulkReplayService] (a foreground service) so the
+     * long full-test-set run is not suspended by the OS. Re-entrant calls while
+     * a run is in flight are ignored by the guard.
+     */
+    fun runOnce(appContext: Context) {
         if (!running.compareAndSet(false, true)) {
             Timber.tag("SIRENBERT").w("bulk replay already running; ignoring re-trigger")
             return
         }
-        val appContext = context.applicationContext
-        scope.launch {
-            try {
-                runInternal(appContext)
-            } finally {
-                running.set(false)
-            }
+        try {
+            runInternal(appContext)
+        } finally {
+            running.set(false)
         }
     }
 

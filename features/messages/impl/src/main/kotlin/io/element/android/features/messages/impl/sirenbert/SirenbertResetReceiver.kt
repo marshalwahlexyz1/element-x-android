@@ -55,10 +55,13 @@ class SirenbertResetReceiver : BroadcastReceiver() {
     }
 
     private fun doBulkReplay(context: Context) {
-        SirenbertBulkReplay.launch(context)
+        // Run inside a foreground service so the full-test-set run is not
+        // suspended/killed when the app is backgrounded. The single-run guard
+        // in SirenbertBulkReplay ignores re-triggers while a run is in flight.
+        SirenbertBulkReplayService.start(context.applicationContext)
         Toast.makeText(
             context,
-            "SIRENBERT bulk replay started; watch logcat for completion",
+            "SIRENBERT bulk replay started (foreground service); watch logcat",
             Toast.LENGTH_SHORT,
         ).show()
     }
