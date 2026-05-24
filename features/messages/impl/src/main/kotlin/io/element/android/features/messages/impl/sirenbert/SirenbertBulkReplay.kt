@@ -51,8 +51,24 @@ object SirenbertBulkReplay {
     private const val INPUT_FILENAME = "eval_set.json"
     private const val TRIGGER_NUM_CLASSES = 14
 
+    // Single-run guard: a second SIRENBERT_BULK_REPLAY broadcast while a run is
+    // already in flight would spawn a concurrent coroutine that competes for CPU
+    // (latency climbs, both runs get throttled). Ignore re-triggers until done.
+    private val running = java.util.concurrent.atomic.AtomicBoolean(false)
+
     fun launch(context: Context) {
-        scope.launch { runInternal(context.applicationContext) }
+        if (!running.compareAndSet(false, true)) {
+            Timber.tag("SIRENBERT").w("bulk replay already running; ignoring re-trigger")
+            return
+        }
+        val appContext = context.applicationContext
+        scope.launch {
+            try {
+                runInternal(appContext)
+            } finally {
+                running.set(false)
+            }
+        }
     }
 
     private fun runInternal(appContext: Context) {
