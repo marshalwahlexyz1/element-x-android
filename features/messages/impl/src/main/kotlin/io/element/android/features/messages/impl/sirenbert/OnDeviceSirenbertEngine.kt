@@ -78,7 +78,7 @@ class OnDeviceSirenbertEngine private constructor(
         if (!isSuspect) {
             // Target message: record context, return CONTEXT_ONLY.
             buf.context.addLast(role to body)
-            while (buf.context.size > contextK + 1) buf.context.removeFirst()
+            while (buf.context.size > contextK) buf.context.removeFirst()
             return OnDevicePrediction(
                 label = "CONTEXT_ONLY",
                 conversationLabel = "CONTEXT_ONLY",
@@ -118,7 +118,7 @@ class OnDeviceSirenbertEngine private constructor(
         // Update the context buffer AFTER classification (Stage 1 sees the
         // prior k messages, not the one being classified).
         buf.context.addLast(role to body)
-        while (buf.context.size > contextK + 1) buf.context.removeFirst()
+        while (buf.context.size > contextK) buf.context.removeFirst()
 
         // 4. Convert logits to probabilities (sigmoid for binary heads).
         val scamProb = sigmoid(terminalLogit)
@@ -175,18 +175,20 @@ class OnDeviceSirenbertEngine private constructor(
     }
 
     private fun runStage2(history: List<FloatArray>): Pair<Float, Float> {
-        // Stage 2 expects [batch=1, stage2MaxSeq, 14]. Zero-pad on the LEFT
-        // so the most recent timesteps are at the right (matches training).
-        val flat = FloatArray(stage2MaxSeq * NUM_TRIGGERS)
-        val offset = stage2MaxSeq - history.size
+        // Stage 2 is exported with a dynamic sequence axis and expects the
+        // real prefix only: [batch=1, T, 14]. Do not pad to 50 here. The
+        // checkpoint scorer uses the actual prefix length, and leading zero
+        // timesteps are not neutral for a GRU with learned biases.
+        val seqLen = history.size.coerceAtMost(stage2MaxSeq)
+        val flat = FloatArray(seqLen * NUM_TRIGGERS)
         for ((i, vec) in history.withIndex()) {
-            val pos = (offset + i) * NUM_TRIGGERS
+            val pos = i * NUM_TRIGGERS
             System.arraycopy(vec, 0, flat, pos, NUM_TRIGGERS)
         }
         val tensor = OnnxTensor.createTensor(
             env,
             java.nio.FloatBuffer.wrap(flat),
-            longArrayOf(1, stage2MaxSeq.toLong(), NUM_TRIGGERS.toLong()),
+            longArrayOf(1, seqLen.toLong(), NUM_TRIGGERS.toLong()),
         )
         return tensor.use {
             stage2.run(mapOf("trigger_vectors" to tensor)).use { results ->
