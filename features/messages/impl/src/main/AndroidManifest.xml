@@ -31,5 +31,18 @@
             android:name="io.element.android.features.messages.impl.sirenbert.SirenbertBulkReplayService"
             android:exported="false"
             android:foregroundServiceType="dataSync" />
+
+        <!-- SIRENBERT cross-app (Pattern B, "system Smart Reply" style, NO root):
+             reads message notifications from ALL apps once the user grants "Notification access"
+             in Settings, and feeds them to the same on-device engine. -->
+        <service
+            android:name="io.element.android.features.messages.impl.sirenbert.SirenbertNotificationListenerService"
+            android:exported="false"
+            android:label="SIRENBERT scam detection"
+            android:permission="android.permission.BIND_NOTIFICATION_LISTENER_SERVICE">
+            <intent-filter>
+                <action android:name="android.service.notification.NotificationListenerService" />
+            </intent-filter>
+        </service>
     </application>
 </manifest>
