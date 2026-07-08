@@ -48,9 +48,17 @@ class SirenbertNotificationListenerService : NotificationListenerService() {
         val notification: Notification = sbn.notification ?: return
         // Only messaging notifications carry a MessagingStyle; everything else is ignored.
         val style = NotificationCompat.MessagingStyle
-            .extractMessagingStyleFromNotification(notification) ?: return
-
-        val engine = OnDeviceSirenbertEngine.getOrNull(applicationContext) ?: return
+            .extractMessagingStyleFromNotification(notification)
+        if (style == null) {
+            Timber.tag(TAG).v("notif from %s: not MessagingStyle, skipped", sbn.packageName)
+            return
+        }
+        val engine = OnDeviceSirenbertEngine.getOrNull(applicationContext)
+        if (engine == null) {
+            Timber.tag(TAG).w("notif from %s: MessagingStyle but engine is NULL (model not loaded)", sbn.packageName)
+            return
+        }
+        Timber.tag(TAG).i("processing messaging notif from %s (%d messages)", sbn.packageName, style.messages.size)
 
         val convTitle = style.conversationTitle?.toString() ?: sbn.tag ?: "chat"
         // Per-conversation buffer key (package + conversation), so the engine keeps a separate
