@@ -130,15 +130,26 @@ object SirenbertCache {
                         scamProb = resp.convScamProbability,
                     )
                 }
-                put(eventId, result)
+                // SIRENBERT cross-app handoff (EMIT side): a Platform_Migration
+                // message is the moment a scammer tries to move the victim to
+                // another app. Attach a sirenbert://track?conv=<key> deeplink so
+                // the UI can offer to continue tracking in a second SIRENBERT
+                // client. Only the opaque conversation key travels; no body.
+                val withHandoff = if (result.trigger == SirenbertHandoff.TRIGGER_PLATFORM_MIGRATION) {
+                    result.copy(handoffUri = SirenbertHandoff.trackUri(conversationKey))
+                } else {
+                    result
+                }
+                put(eventId, withHandoff)
                 Timber.tag("SIRENBERT").d(
-                    "cache put via=%s id=%s status=%s trigger=%s susp=%s scam=%s",
+                    "cache put via=%s id=%s status=%s trigger=%s susp=%s scam=%s handoff=%s",
                     if (engine != null) "OD" else "API",
                     eventId.take(12),
-                    result.status,
-                    result.trigger,
-                    result.suspProb,
-                    result.scamProb,
+                    withHandoff.status,
+                    withHandoff.trigger,
+                    withHandoff.suspProb,
+                    withHandoff.scamProb,
+                    withHandoff.handoffUri != null,
                 )
             } catch (t: Throwable) {
                 Timber.tag("SIRENBERT").w(t, "classify failed id=%s", eventId.take(12))

@@ -152,6 +152,25 @@ class OnDeviceSirenbertEngine private constructor(
         rooms.clear()
     }
 
+    /**
+     * SIRENBERT cross-app handoff: ensure a per-conversation buffer exists for
+     * [conversationKey] so subsequent messages classified under this key CONTINUE
+     * the tracking sequence rather than starting a fresh one. Called when a
+     * sirenbert://track?conv=<key> deeplink is opened after a handoff from another
+     * SIRENBERT-enabled client (see [SirenbertTrackDeeplinkActivity]). Idempotent;
+     * never carries message content across apps.
+     */
+    fun seedConversation(conversationKey: String) {
+        val created = !rooms.containsKey(conversationKey)
+        rooms.getOrPut(conversationKey) { RoomBuffers() }
+        Timber.tag("SIRENBERT").i(
+            "handoff seed conv=%s created=%s trackedConvs=%d",
+            conversationKey,
+            created,
+            rooms.size,
+        )
+    }
+
     private fun runStage1(t: TokenizedInput): FloatArray {
         val inputIds = OnnxTensor.createTensor(
             env,

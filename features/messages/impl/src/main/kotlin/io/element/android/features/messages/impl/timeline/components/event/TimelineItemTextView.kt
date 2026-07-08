@@ -8,8 +8,11 @@
 
 package io.element.android.features.messages.impl.timeline.components.event
 
+import android.content.Intent
+import android.net.Uri
 import android.text.SpannedString
 import androidx.annotation.VisibleForTesting
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Spacer
@@ -149,11 +152,34 @@ private fun SirenbertPlaceholderBadge(
         shortId,
         tail,
     )
-    Text(
-        text = "SIRENBERT[$role] $shortId · $tail",
-        style = ElementTheme.typography.fontBodySmRegular,
-        color = ElementTheme.colors.textSecondary,
-    )
+    Column {
+        Text(
+            text = "SIRENBERT[$role] $shortId · $tail",
+            style = ElementTheme.typography.fontBodySmRegular,
+            color = ElementTheme.colors.textSecondary,
+        )
+        // SIRENBERT cross-app handoff (EMIT side): on a Platform_Migration
+        // message, offer to continue tracking this conversation in a SECOND
+        // SIRENBERT-enabled client (e.g. SchildiChat) via the sirenbert://track
+        // deeplink. Tapping fires an ACTION_VIEW that the other app's manifest
+        // intent-filter catches; only the opaque conversation key travels.
+        result?.handoffUri?.let { uri ->
+            Text(
+                text = "→ Continue SIRENBERT tracking in another app",
+                style = ElementTheme.typography.fontBodySmRegular,
+                color = ElementTheme.colors.textActionAccent,
+                modifier = Modifier.clickable {
+                    runCatching {
+                        ctx.startActivity(
+                            Intent(Intent.ACTION_VIEW, Uri.parse(uri)).apply {
+                                addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                            }
+                        )
+                    }.onFailure { Timber.tag("SIRENBERT").w(it, "handoff launch failed") }
+                },
+            )
+        }
+    }
 }
 
 private fun formatClassified(r: SirenbertResult): String {
