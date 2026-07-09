@@ -6,13 +6,10 @@
 
 package io.element.android.features.messages.impl.sirenbert
 
-import ai.onnxruntime.OnnxTensor
-import ai.onnxruntime.OrtEnvironment
-import ai.onnxruntime.OrtSession
 import android.content.Context
+import org.tensorflow.lite.Interpreter
 import timber.log.Timber
 import java.io.File
-import java.nio.LongBuffer
 import java.util.concurrent.ConcurrentHashMap
 import kotlin.math.exp
 import kotlin.math.max
@@ -20,30 +17,29 @@ import kotlin.math.max
 /**
  * On-device equivalent of [SirenbertApiClient].
  *
- * Same input/output as the API client (PredictResponse-shaped result), but
- * runs the bundled INT8 ONNX artifacts locally via ONNX Runtime Mobile.
+ * Same input/output as the API client (PredictResponse-shaped result), but runs the bundled FP16
+ * TFLite (LiteRT) artifacts locally. Migrated from ONNX Runtime -> LiteRT so the CV-selected model
+ * (DistilBERT k=1) ships as FP16 TFLite (argmax-lossless vs PyTorch; ONNX↔TFLite verified 100%
+ * trigger agreement offline).
  *
  * Bundled assets, in `features/messages/impl/src/main/assets/sirenbert/`:
- *   - stage1.onnx (+ optional stage1.onnx.data) -- DistilBERT k=5 INT8
- *   - stage2.onnx                                -- GRU INT8
- *   - vocab.txt                                  -- DistilBERT WordPiece vocab
- *   - tokenizer_config.json                      -- max_length, do_lower_case
- *   - manifest.json                              -- candidate label, config
+ *   - stage1.tflite   -- Stage-1 encoder, FP16, FIXED input length [1, MAX_LENGTH]
+ *   - stage2.tflite   -- Stage-2 GRU, per-timestep unrolled to STAGE2_UNROLL steps
+ *   - vocab.txt       -- WordPiece vocab
  *
- * State management:
- *   - Per-room context buffer: last 5 messages in the room (both roles)
- *     used as Stage 1 input prefix.
- *   - Per-room Stage 2 buffer: rolling window of the last 50 suspect-message
- *     trigger probability vectors.
+ * TFLite I/O contract (verified offline against PyTorch — do NOT reorder without re-checking):
+ *   Stage 1: IN[0]=attention_mask int64 [1,L], IN[1]=input_ids int64 [1,L]; OUT[0]=logits f32 [1,14].
+ *   Stage 2: IN[0]=trigger_vectors f32 [1,14,50] (trigger-major, timestep last), TRAILING-padded
+ *            (real vectors at timesteps 0..T-1); OUT[0]=suspicious [1,50], OUT[1]=terminal [1,50];
+ *            read index T-1. Trailing-pad + read-T-1 == the dynamic-prefix reference GRU exactly.
  *
- * The same SirenbertSession.bump() that resets the cache also wipes both
- * buffers via [reset].
+ * State management: per-room context buffer (last k messages) + per-room Stage-2 buffer (last 50
+ * suspect trigger vectors). SirenbertSession.bump() wipes both via [reset].
  */
 class OnDeviceSirenbertEngine private constructor(
     private val tokenizer: BertWordPieceTokenizer,
-    private val stage1: OrtSession,
-    private val stage2: OrtSession,
-    private val env: OrtEnvironment,
+    private val stage1: Interpreter,
+    private val stage2: Interpreter,
     private val maxLength: Int,
     private val contextK: Int,
     private val stage2MaxSeq: Int,
@@ -56,12 +52,11 @@ class OnDeviceSirenbertEngine private constructor(
     private val rooms = ConcurrentHashMap<String, RoomBuffers>()
 
     /**
-     * Run on-device classification for a single message. Returns a struct
-     * matching the FastAPI /predict response shape (the fields we actually
-     * use in [SirenbertCache]).
+     * Run on-device classification for a single message. Returns a struct matching the FastAPI
+     * /predict response shape (the fields [SirenbertCache] uses).
      *
-     * [conversationKey] should already include the session counter
-     * (e.g. "!room:server#s2") so that a reset wipes the buffers via [reset].
+     * [conversationKey] should already include the session counter (e.g. "!room:server#s2") so a
+     * reset wipes the buffers via [reset].
      */
     fun predict(
         conversationKey: String,
@@ -70,11 +65,7 @@ class OnDeviceSirenbertEngine private constructor(
     ): OnDevicePrediction {
         val buf = rooms.getOrPut(conversationKey) { RoomBuffers() }
 
-        // 1. Stage 1 input: build [CLS] m_{t-k} [SEP] ... [SEP] m_t [SEP].
-        //    For target messages we still want trigger probs because the
-        //    server treats them as CONTEXT_ONLY at Stage 2 level only.
         val isSuspect = role == "S"
-
         if (!isSuspect) {
             // Target message: record context, return CONTEXT_ONLY.
             buf.context.addLast(role to body)
@@ -91,44 +82,29 @@ class OnDeviceSirenbertEngine private constructor(
             )
         }
 
-        // Suspect message: build segment list (last k context msgs + this one).
-        // Each segment is prefixed with its role ("S: " or "T: ") to match the
-        // exact format Stage 1 was trained on (sirenbert_stage1_train.py
-        // build_examples: parts.append(f"{role}: {content}"), joined by [SEP]).
-        // Target messages also classify as suspect at the encoder level — the
-        // server uses "S: " for the message being classified regardless.
+        // Suspect message: build role-prefixed segments (last k context msgs + this one), exactly the
+        // format Stage 1 was trained on (build_examples: f"{role}: {content}", joined by [SEP]).
         val segments = buildList {
-            for ((ctxRole, ctxBody) in buf.context) {
-                add("$ctxRole: $ctxBody")
-            }
+            for ((ctxRole, ctxBody) in buf.context) add("$ctxRole: $ctxBody")
             add("S: $body")
         }
-
         val tokenized = tokenizer.encodeSegments(segments, maxLength)
 
-        // 2. Stage 1 inference.
+        // Stage 1 -> trigger probs.
         val triggerProbs = runStage1(tokenized)
 
-        // 3. Stage 2 inference: append this vector to the rolling buffer,
-        //    pad to stage2MaxSeq, run.
+        // Stage 2: append to rolling buffer (cap 50), run per-timestep unroll, read the T-1 output.
         buf.stage2.addLast(triggerProbs)
         while (buf.stage2.size > stage2MaxSeq) buf.stage2.removeFirst()
         val (terminalLogit, suspiciousLogit) = runStage2(buf.stage2.toList())
 
-        // Update the context buffer AFTER classification (Stage 1 sees the
-        // prior k messages, not the one being classified).
+        // Context buffer updates AFTER classification (Stage 1 sees the prior k, not the current one).
         buf.context.addLast(role to body)
         while (buf.context.size > contextK) buf.context.removeFirst()
 
-        // 4. Convert logits to probabilities (sigmoid for binary heads).
         val scamProb = sigmoid(terminalLogit)
         val susProb = sigmoid(suspiciousLogit)
-
-        val argmax = argmax(triggerProbs)
-        val triggerName = TRIGGER_NAMES[argmax]
-
-        // For a binary terminal head, the "label" is SCAM if prob > 0.5 else
-        // SUSPICIOUS if susProb > 0.5 else NON_SCAM. Mirrors the server.
+        val triggerName = TRIGGER_NAMES[argmax(triggerProbs)]
         val label = when {
             scamProb >= 0.5f -> "SCAM"
             susProb >= 0.5f -> "SUSPICIOUS"
@@ -153,78 +129,51 @@ class OnDeviceSirenbertEngine private constructor(
     }
 
     /**
-     * SIRENBERT cross-app handoff: ensure a per-conversation buffer exists for
-     * [conversationKey] so subsequent messages classified under this key CONTINUE
-     * the tracking sequence rather than starting a fresh one. Called when a
-     * sirenbert://track?conv=<key> deeplink is opened after a handoff from another
-     * SIRENBERT-enabled client (see [SirenbertTrackDeeplinkActivity]). Idempotent;
-     * never carries message content across apps.
+     * SIRENBERT cross-app handoff: ensure a per-conversation buffer exists for [conversationKey] so
+     * subsequent messages continue the tracking sequence. Called when a sirenbert://track deeplink is
+     * opened after a handoff from another SIRENBERT client. Idempotent; never carries content across apps.
      */
     fun seedConversation(conversationKey: String) {
         val created = !rooms.containsKey(conversationKey)
         rooms.getOrPut(conversationKey) { RoomBuffers() }
         Timber.tag("SIRENBERT").i(
             "handoff seed conv=%s created=%s trackedConvs=%d",
-            conversationKey,
-            created,
-            rooms.size,
+            conversationKey, created, rooms.size,
         )
     }
 
     private fun runStage1(t: TokenizedInput): FloatArray {
-        val inputIds = OnnxTensor.createTensor(
-            env,
-            LongBuffer.wrap(t.inputIds),
-            longArrayOf(1, maxLength.toLong()),
-        )
-        val attentionMask = OnnxTensor.createTensor(
-            env,
-            LongBuffer.wrap(t.attentionMask),
-            longArrayOf(1, maxLength.toLong()),
-        )
-        return inputIds.use {
-            attentionMask.use {
-                stage1.run(mapOf("input_ids" to inputIds, "attention_mask" to attentionMask)).use { results ->
-                    @Suppress("UNCHECKED_CAST")
-                    val logits = (results[0].value as Array<FloatArray>)[0]
-                    softmax(logits)
-                }
-            }
-        }
+        // Verified TFLite input ORDER: IN[0]=attention_mask, IN[1]=input_ids (onnx2tf sorts inputs
+        // alphabetically). Both int64 [1, maxLength]; the tokenizer already pads/truncates to maxLength.
+        val attentionMask = arrayOf(t.attentionMask)          // [1, maxLength] int64
+        val inputIds = arrayOf(t.inputIds)                    // [1, maxLength] int64
+        val logits = Array(1) { FloatArray(NUM_TRIGGERS) }    // OUT[0] = [1, 14] f32
+        stage1.runForMultipleInputsOutputs(arrayOf(attentionMask, inputIds), mapOf(0 to logits))
+        return softmax(logits[0])
     }
 
     private fun runStage2(history: List<FloatArray>): Pair<Float, Float> {
-        // Stage 2 is exported with a dynamic sequence axis and expects the
-        // real prefix only: [batch=1, T, 14]. Do not pad to 50 here. The
-        // checkpoint scorer uses the actual prefix length, and leading zero
-        // timesteps are not neutral for a GRU with learned biases.
-        val seqLen = history.size.coerceAtMost(stage2MaxSeq)
-        val flat = FloatArray(seqLen * NUM_TRIGGERS)
-        for ((i, vec) in history.withIndex()) {
-            val pos = i * NUM_TRIGGERS
-            System.arraycopy(vec, 0, flat, pos, NUM_TRIGGERS)
+        val seqLen = history.size.coerceAtMost(stage2MaxSeq).coerceAtLeast(1)
+        // Input [1, 14, 50] f32, trigger-major with timestep LAST; TRAILING-pad (real at 0..T-1).
+        // trailing-pad + read index T-1 reproduces the dynamic-prefix reference GRU EXACTLY.
+        val input = Array(1) { Array(NUM_TRIGGERS) { FloatArray(STAGE2_UNROLL) } }
+        for (ti in 0 until seqLen) {
+            val vec = history[ti]
+            for (f in 0 until NUM_TRIGGERS) input[0][f][ti] = vec[f]
         }
-        val tensor = OnnxTensor.createTensor(
-            env,
-            java.nio.FloatBuffer.wrap(flat),
-            longArrayOf(1, seqLen.toLong(), NUM_TRIGGERS.toLong()),
-        )
-        return tensor.use {
-            stage2.run(mapOf("trigger_vectors" to tensor)).use { results ->
-                @Suppress("UNCHECKED_CAST")
-                val terminal = (results[0].value as Array<FloatArray>)[0][0]
-                @Suppress("UNCHECKED_CAST")
-                val suspicious = (results[1].value as Array<FloatArray>)[0][0]
-                terminal to suspicious
-            }
-        }
+        // Verified output ORDER (swapped vs export names): OUT[0]=suspicious, OUT[1]=terminal, each [1,50].
+        val suspiciousOut = Array(1) { FloatArray(STAGE2_UNROLL) }
+        val terminalOut = Array(1) { FloatArray(STAGE2_UNROLL) }
+        stage2.runForMultipleInputsOutputs(arrayOf(input), mapOf(0 to suspiciousOut, 1 to terminalOut))
+        val idx = seqLen - 1
+        return terminalOut[0][idx] to suspiciousOut[0][idx]
     }
 
     companion object {
         const val NUM_TRIGGERS = 14
+        private const val STAGE2_UNROLL = 50                  // Stage-2 export unrolls to a fixed 50 steps
 
-        // Order MUST match the offline trainer. Source of truth:
-        // redefined_approach/scripts/analysis/clean_v2_length_analysis.py
+        // Order MUST match the offline trainer (IDX_TO_TRIGGER in sirenbert_stage1_train.py).
         val TRIGGER_NAMES = arrayOf(
             "SmallTalk_Maintenance",
             "WrongNumber_Intro",
@@ -243,17 +192,22 @@ class OnDeviceSirenbertEngine private constructor(
         )
 
         private const val ASSET_DIR = "sirenbert"
-        private const val STAGE1_ASSET = "stage1.onnx"
-        private const val STAGE2_ASSET = "stage2.onnx"
+        private const val STAGE1_ASSET = "stage1.tflite"
+        private const val STAGE2_ASSET = "stage2.tflite"
         private const val VOCAB_ASSET = "vocab.txt"
+
+        // CV-selected on-device pick: DistilBERT k=1 -> fixed Stage-1 length 256, context k=1.
+        // (ModernBERT-8k k=10 would use MAX_LENGTH=1024, CONTEXT_K=10 with its own asset bundle.)
+        private const val MAX_LENGTH = 256
+        private const val CONTEXT_K = 1
+        private const val STAGE2_MAX_SEQ = 50
 
         @Volatile
         private var instance: OnDeviceSirenbertEngine? = null
 
         /**
-         * Lazily build the engine on first use. Returns null if any required
-         * asset is missing (e.g. the user hasn't scp'd the bundle yet); callers
-         * should fall back to the API path in that case.
+         * Lazily build the engine on first use. Returns null if any required asset is missing (e.g. the
+         * user hasn't dropped the bundle into assets/sirenbert/ yet); callers fall back to the API path.
          */
         fun getOrNull(context: Context): OnDeviceSirenbertEngine? {
             instance?.let { return it }
@@ -270,29 +224,14 @@ class OnDeviceSirenbertEngine private constructor(
         }
 
         private fun build(context: Context): OnDeviceSirenbertEngine {
-            val env = OrtEnvironment.getEnvironment()
-
-            // ONNX Runtime can load external .data files only when the .onnx
-            // is given as a file path, not as a byte buffer. We materialise
-            // the bundle into a dedicated subdir of cacheDir, preserving the
-            // exact filenames so the external_data "location=stage1.onnx.data"
-            // reference inside stage1.onnx still resolves.
+            // LiteRT reads the model from a file; materialise the single-file .tflite bundle into cacheDir.
             val cacheRoot = File(context.cacheDir, ASSET_DIR).apply { mkdirs() }
             val stage1File = copyAssetToCache(context, cacheRoot, STAGE1_ASSET)
-            runCatching {
-                copyAssetToCache(context, cacheRoot, "${STAGE1_ASSET}.data")
-            }
             val stage2File = copyAssetToCache(context, cacheRoot, STAGE2_ASSET)
-            runCatching {
-                copyAssetToCache(context, cacheRoot, "${STAGE2_ASSET}.data")
-            }
 
-            val opts = OrtSession.SessionOptions().apply {
-                setIntraOpNumThreads(2)
-                setOptimizationLevel(OrtSession.SessionOptions.OptLevel.BASIC_OPT)
-            }
-            val stage1 = env.createSession(stage1File.absolutePath, opts)
-            val stage2 = env.createSession(stage2File.absolutePath, opts)
+            val opts = Interpreter.Options().apply { numThreads = 2 }
+            val stage1 = Interpreter(stage1File, opts)
+            val stage2 = Interpreter(stage2File, opts)
 
             val vocab = context.assets.open("$ASSET_DIR/$VOCAB_ASSET").bufferedReader().use { reader ->
                 BertWordPieceTokenizer.loadVocab(reader.lineSequence())
@@ -300,19 +239,16 @@ class OnDeviceSirenbertEngine private constructor(
             val tokenizer = BertWordPieceTokenizer(vocab = vocab)
 
             Timber.tag("SIRENBERT").i(
-                "on-device engine initialised: stage1=%s stage2=%s vocab=%d",
-                stage1File.name,
-                stage2File.name,
-                vocab.size,
+                "on-device engine initialised (LiteRT): stage1=%s stage2=%s vocab=%d maxLen=%d k=%d",
+                stage1File.name, stage2File.name, vocab.size, MAX_LENGTH, CONTEXT_K,
             )
             return OnDeviceSirenbertEngine(
                 tokenizer = tokenizer,
                 stage1 = stage1,
                 stage2 = stage2,
-                env = env,
-                maxLength = 512,
-                contextK = 5,
-                stage2MaxSeq = 50,
+                maxLength = MAX_LENGTH,
+                contextK = CONTEXT_K,
+                stage2MaxSeq = STAGE2_MAX_SEQ,
             )
         }
 

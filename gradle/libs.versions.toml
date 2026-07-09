@@ -151,11 +151,11 @@ network_retrofit_bom = "com.squareup.retrofit2:retrofit-bom:3.0.0"
 network_retrofit = { module = "com.squareup.retrofit2:retrofit" }
 network_retrofit_converter_serialization = { module = "com.squareup.retrofit2:converter-kotlinx-serialization" }
 
-# SIRENBERT on-device inference (ONNX Runtime Mobile).
-# Pin to >=1.21 so the shipped .so files are 16 KB-page-size aligned
-# (Android 15+ requirement; 1.18 ships 4 KB-aligned .so and triggers
-# the "this app isn't 16 KB compatible" install warning).
-sirenbert_onnxruntime = "com.microsoft.onnxruntime:onnxruntime-android:1.26.0"
+# SIRENBERT on-device inference (LiteRT / TFLite).
+# Migrated from ONNX Runtime -> LiteRT to ship the CV-selected model as FP16 TFLite.
+# Provides the org.tensorflow.lite.Interpreter API. Bump the version if the build needs a newer
+# LiteRT (the Interpreter API used by OnDeviceSirenbertEngine is stable across 1.x).
+sirenbert_litert = "com.google.ai.edge.litert:litert:1.0.1"
 
 # Quality
 # Reference ktlint-cli so that Renovate can check if a new version is available.
